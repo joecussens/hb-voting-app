@@ -322,17 +322,6 @@ function renderRankList() {
   attachDragHandlers(container);
 }
 
-function updateRankNumbers(container) {
-  Array.from(container.children).forEach((row, i) => {
-    row.querySelector(".rank-num").textContent = i + 1;
-  });
-}
-
-function syncOrderFromDOM(container) {
-  const ids = Array.from(container.children).map((row) => row.dataset.id);
-  participantPillarOrder = ids.map((id) => PILLARS.find((p) => p.id === id));
-}
-
 function markPillarsUnsubmittedIfNeeded() {
   if (participantPillarsSubmitted) {
     participantPillarsSubmitted = false;
@@ -349,17 +338,24 @@ function attachDragHandlers(container) {
   let dragEl = null;
   let startY0 = 0;
   let startIndex0 = 0;
-  let currentDomIndex = 0;
-  let rowHeight = 0;
+  let initialTops = [];
+  let initialHeights = [];
+  let originalOrderSnapshot = [];
+  let draggedId = null;
 
   container.querySelectorAll(".rank-handle").forEach((handle) => {
     handle.addEventListener("pointerdown", (e) => {
       handle.setPointerCapture(e.pointerId);
       dragEl = handle.closest(".rank-row");
+      draggedId = dragEl.dataset.id;
       startY0 = e.clientY;
-      startIndex0 = Array.from(container.children).indexOf(dragEl);
-      currentDomIndex = startIndex0;
-      rowHeight = dragEl.offsetHeight + 10;
+
+      const rows = Array.from(container.children);
+      startIndex0 = rows.indexOf(dragEl);
+      initialTops = rows.map((r) => r.getBoundingClientRect().top);
+      initialHeights = rows.map((r) => r.getBoundingClientRect().height);
+      originalOrderSnapshot = participantPillarOrder.slice();
+
       dragEl.style.zIndex = 5;
       dragEl.style.boxShadow = "0 6px 16px rgba(14,40,65,0.18)";
       dragEl.style.borderColor = "var(--blue)";
@@ -368,33 +364,36 @@ function attachDragHandlers(container) {
     handle.addEventListener("pointermove", (e) => {
       if (!dragEl) return;
       const totalDeltaY = e.clientY - startY0;
-      const maxIndex = container.children.length - 1;
-      const targetIndex = Math.min(Math.max(startIndex0 + Math.round(totalDeltaY / rowHeight), 0), maxIndex);
-      const visualOffset = totalDeltaY - (targetIndex - startIndex0) * rowHeight;
-      dragEl.style.transform = `translateY(${visualOffset}px)`;
+      dragEl.style.transform = `translateY(${totalDeltaY}px)`;
 
-      if (targetIndex !== currentDomIndex) {
-        const referenceNode = container.children[targetIndex];
-        if (targetIndex > currentDomIndex) {
-          container.insertBefore(dragEl, referenceNode.nextSibling);
-        } else {
-          container.insertBefore(dragEl, referenceNode);
-        }
-        currentDomIndex = targetIndex;
-        updateRankNumbers(container);
-        syncOrderFromDOM(container);
+      const draggedCenter = initialTops[startIndex0] + initialHeights[startIndex0] / 2 + totalDeltaY;
+
+      let targetIndex = 0;
+      for (let i = 0; i < initialTops.length; i++) {
+        if (i === startIndex0) continue;
+        const otherCenter = initialTops[i] + initialHeights[i] / 2;
+        if (draggedCenter > otherCenter) targetIndex++;
       }
+      targetIndex = Math.min(Math.max(targetIndex, 0), originalOrderSnapshot.length - 1);
+
+      const newOrder = originalOrderSnapshot.filter((p) => p.id !== draggedId);
+      const draggedItem = originalOrderSnapshot.find((p) => p.id === draggedId);
+      newOrder.splice(targetIndex, 0, draggedItem);
+      participantPillarOrder = newOrder;
+
+      Array.from(container.children).forEach((rowEl) => {
+        if (rowEl === dragEl) return;
+        const pos = newOrder.findIndex((p) => p.id === rowEl.dataset.id);
+        rowEl.querySelector(".rank-num").textContent = pos + 1;
+      });
+      dragEl.querySelector(".rank-num").textContent = targetIndex + 1;
+
+      markPillarsUnsubmittedIfNeeded();
     });
 
     function endDrag() {
-      if (dragEl) {
-        dragEl.style.transform = "";
-        dragEl.style.zIndex = "";
-        dragEl.style.boxShadow = "";
-        dragEl.style.borderColor = "";
-      }
-      if (dragEl) markPillarsUnsubmittedIfNeeded();
       dragEl = null;
+      renderRankList();
     }
     handle.addEventListener("pointerup", endDrag);
     handle.addEventListener("pointercancel", endDrag);
