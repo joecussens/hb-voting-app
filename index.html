@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<title>H&B AI Policy Workshop — Voting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --navy: #0E2841;
+    --blue: #156082;
+    --grey: #E8E8E8;
+    --white: #FFFFFF;
+    --ink: #0E2841;
+    --muted: #6B7785;
+    --green: #2E7D46;
+    --amber: #D99A1B;
+    --red: #C4463A;
+    --depends: #8A93A0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Montserrat', sans-serif; background: #F7F8F9; color: var(--ink); -webkit-tap-highlight-color: transparent; }
+  button { font-family: 'Montserrat', sans-serif; cursor: pointer; }
+  .btn { font-weight: 600; font-size: 15px; padding: 12px 20px; border-radius: 8px; border: none; transition: transform .08s ease, opacity .15s ease; }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-dark { background: var(--navy); color: #fff; }
+  .btn-ghost { background: transparent; color: var(--navy); border: 1.5px solid var(--navy); }
+  .btn-subtle { background: var(--grey); color: var(--navy); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .role-screen { min-height: 100vh; background: var(--navy); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+  .role-eyebrow { color:#fff; font-size:13px; opacity:.7; margin-bottom:8px; letter-spacing:.5px; }
+  .role-title { color:#fff; font-size:28px; font-weight:700; margin:0 0 36px; max-width:380px; }
+  .role-buttons { display:flex; flex-direction:column; gap:14px; width:100%; max-width:320px; }
+  .p-header { background: var(--navy); color:#fff; padding:16px 20px; font-size:13px; opacity:.9; }
+  .p-body { flex:1; padding:20px; display:flex; flex-direction:column; min-height: calc(100vh - 54px); }
+  .vote-btn { font-weight:700; font-size:18px; padding:20px; border-radius:12px; border:3px solid transparent; color:#fff; }
+  .scenario-text { font-size:20px; font-weight:600; line-height:1.4; margin-bottom:28px; }
+  .rank-row { display:flex; align-items:center; background:#fff; border-radius:10px; border:1.5px solid #DDE3E8; padding:12px 10px 12px 16px; margin-bottom:10px; position:relative; touch-action: manipulation; }
+  .rank-num { width:28px; height:28px; border-radius:50%; background:var(--navy); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; margin-right:12px; flex-shrink:0; }
+  .rank-name { flex:1; font-size:15px; font-weight:500; }
+  .rank-handle { touch-action:none; cursor:grab; padding:8px 10px; font-size:18px; color:var(--muted); user-select:none; }
+  .el-group-label { font-size:12px; font-weight:700; color:var(--blue); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+  .el-btn { display:block; width:100%; text-align:left; font-size:15px; font-weight:500; padding:13px 14px; border-radius:8px; border:2px solid #DDE3E8; background:#fff; color:var(--ink); margin-bottom:8px; }
+  .el-btn.picked { font-weight:700; border-color:var(--blue); background:#EAF3F6; }
+  .el-btn:disabled { color:#B7BEC6; cursor:not-allowed; }
+  .fixed-submit { position:fixed; bottom:0; left:0; right:0; padding:16px; background:#fff; border-top:1px solid #E2E6EA; }
+  .top-bar { background:var(--navy); color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  .tab-btn { font-weight:600; font-size:14px; padding:8px 16px; border-radius:20px; border:none; background:rgba(255,255,255,.12); color:#fff; }
+  .tab-btn.active { background: var(--blue); }
+  .panel-grid { padding:24px; display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+  @media (max-width: 860px) { .panel-grid { grid-template-columns: 1fr; } }
+  .card { background:#fff; border-radius:12px; padding:24px; }
+  .bar-row { margin-bottom:14px; }
+  .bar-label-row { display:flex; justify-content:space-between; margin-bottom:4px; font-size:14px; }
+  .bar-track { background:#EEF1F3; border-radius:6px; height:22px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:6px; transition:width .4s ease; }
+  table.pattern { border-collapse:collapse; width:100%; }
+  table.pattern th { font-size:11px; color:var(--muted); padding:4px 6px; font-weight:500; }
+  table.pattern td { padding:4px 6px; }
+  .cell { width:18px; height:18px; border-radius:4px; background:#EEF1F3; }
+  .waiting { align-items:center; justify-content:center; text-align:center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* ---------- Config ---------- */
+const SUPABASE_URL = "https://bwpdumhphvsjnereiain.supabase.co";
+const SUPABASE_KEY = "sb_publishable_pEuI_f9YnPhtpkdaeFzidA_1ZXi8Beb";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const VOTE_COLORS = { green: "#2E7D46", amber: "#D99A1B", red: "#C4463A", depends: "#8A93A0" };
+const VOTE_LABELS = { green: "Green", amber: "Amber", red: "Red", depends: "It depends" };
+const VOTE_ORDER = ["green", "amber", "red", "depends"];
+const ELEMENT_CAP = 8;
+const POLL_MS = 2500;
+
+const SCENARIOS = [
+  { text: "Uploading a signed commercial lease to Copilot to summarise the break clauses", why: "Data privacy + tests the Copilot-vs-ChatGPT knowledge gap", armoury: null },
+  { text: "An agent that reads supplier invoices and posts them into the finance system with no human check", why: "Accountability + automation without oversight — lands directly for Danny", armoury: "Same scenario, but it's your name on it if it goes wrong. Same answer?" },
+  { text: "Using AI to screen job applications", why: "Fairness/bias — Rohan raised this unprompted in his own call", armoury: "Same scenario, but a competitor's already doing it. Same answer?" },
+  { text: "AI-written social copy going onto a pub's Facebook page without review", why: "Brand risk, low technical complexity — easy entry point", armoury: null },
+  { text: "Uploading a customer complaint, with name and address, to draft a response", why: "Data privacy, close to daily reality for several attendees", armoury: null },
+  { text: "A supplier's new AI feature that processes your EPOS data offshore", why: "Third-party creep — AI arriving without anyone deciding", armoury: null },
+  { text: "An AI phone agent taking table bookings", why: "Named use case from earlier content — directly contentious for Ollie vs Wayde", armoury: "Who's changed their mind in the last five minutes?" },
+  { text: "Auto-ordering stock from an AI demand forecast with no human sign-off", why: "Automation + commercial risk, distinct from #2 (revenue vs cost side)", armoury: null },
+];
+
+const PILLARS = [
+  { id: "p1", name: "Purpose & Universal Parameters" },
+  { id: "p2", name: "Accountability" },
+  { id: "p3", name: "Human Oversight" },
+  { id: "p4", name: "Technical & Tools" },
+  { id: "p5", name: "Data & Privacy" },
+  { id: "p6", name: "Fairness, Societal & Environmental" },
+];
+
+const ELEMENTS = [
+  { id: "e1", pillar: "p1", name: "Strategy and objectives" },
+  { id: "e2", pillar: "p1", name: "Brand and reputation" },
+  { id: "e3", pillar: "p1", name: "Values" },
+  { id: "e4", pillar: "p2", name: "Accountability" },
+  { id: "e5", pillar: "p2", name: "Incident response and the off switch" },
+  { id: "e6", pillar: "p2", name: "Getting a yes, and challenging a no" },
+  { id: "e7", pillar: "p2", name: "Ownership and review" },
+  { id: "e8", pillar: "p3", name: "Acceptable use" },
+  { id: "e9", pillar: "p3", name: "Human review and sign-off" },
+  { id: "e10", pillar: "p3", name: "What must never be automated" },
+  { id: "e11", pillar: "p4", name: "Approved tools" },
+  { id: "e12", pillar: "p4", name: "Accounts, licences and access" },
+  { id: "e13", pillar: "p4", name: "Third-party and supplier AI" },
+  { id: "e14", pillar: "p4", name: "AI inventory" },
+  { id: "e15", pillar: "p5", name: "Data and inputs" },
+  { id: "e16", pillar: "p6", name: "Transparency and disclosure" },
+  { id: "e17", pillar: "p6", name: "Ethics, diversity and fairness" },
+  { id: "e18", pillar: "p6", name: "Impact on people and jobs" },
+  { id: "e19", pillar: "p6", name: "Accessibility and exclusion" },
+  { id: "e20", pillar: "p6", name: "Environmental impact" },
+];
+
+function makeDeviceId() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  return "id-" + Math.random().toString(16).slice(2) + Date.now().toString(16);
+}
+function shortId(id) { return id.replace(/-/g, "").slice(-4).toUpperCase(); }
+const DEVICE_ID = makeDeviceId();
+
+const root = document.getElementById("root");
+let role = null;
+let pollTimer = null;
+
+/* ---------- Data access ---------- */
+async function getControl() {
+  const { data, error } = await sb.from("control_state").select("*").eq("id", 1).single();
+  if (error) return { exercise: "idle", risk_index: 0, priority_stage: 1 };
+  return data;
+}
+async function setControl(patch) {
+  await sb.from("control_state").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", 1);
+}
+async function getMyRisk() {
+  const { data } = await sb.from("risk_votes").select("votes").eq("device_id", DEVICE_ID).maybeSingle();
+  return (data && data.votes) || {};
+}
+async function castRiskVote(scenarioIndex, vote) {
+  const current = await getMyRisk();
+  current[scenarioIndex] = vote;
+  await sb.from("risk_votes").upsert(
+    { device_id: DEVICE_ID, votes: current, updated_at: new Date().toISOString() },
+    { onConflict: "device_id" }
+  );
+  return current;
+}
+async function getMyPriority() {
+  const { data } = await sb.from("priority_votes").select("pillars,elements").eq("device_id", DEVICE_ID).maybeSingle();
+  return data || { pillars: null, elements: null };
+}
+async function submitPillars(order) {
+  const existing = await getMyPriority();
+  await sb.from("priority_votes").upsert(
+    { device_id: DEVICE_ID, pillars: order, elements: existing.elements || null, updated_at: new Date().toISOString() },
+    { onConflict: "device_id" }
+  );
+}
+async function submitElements(picks) {
+  const existing = await getMyPriority();
+  await sb.from("priority_votes").upsert(
+    { device_id: DEVICE_ID, pillars: existing.pillars || null, elements: picks, updated_at: new Date().toISOString() },
+    { onConflict: "device_id" }
+  );
+}
+async function getAllRisk() {
+  const { data } = await sb.from("risk_votes").select("device_id,votes");
+  return data || [];
+}
+async function getAllPriority() {
+  const { data } = await sb.from("priority_votes").select("device_id,pillars,elements");
+  return data || [];
+}
+async function resetAllData() {
+  await sb.from("risk_votes").delete().neq("device_id", "");
+  await sb.from("priority_votes").delete().neq("device_id", "");
+  await setControl({ exercise: "idle", risk_index: 0, priority_stage: 1 });
+}
+
+/* ---------- Role select ---------- */
+function renderRoleSelect() {
+  root.innerHTML = `
+    <div class="role-screen">
+      <div class="role-eyebrow">Heron &amp; Brearley · AI Policy Workshop</div>
+      <h1 class="role-title">How are you joining today?</h1>
+      <div class="role-buttons">
+        <button class="btn btn-primary" id="pick-participant" style="padding:18px 20px;font-size:17px;">I'm voting</button>
+        <button class="btn" id="pick-facilitator" style="padding:16px 20px;font-size:15px;background:transparent;color:#fff;border:1.5px solid var(--blue);">I'm facilitating</button>
+      </div>
+    </div>`;
+  document.getElementById("pick-participant").onclick = () => { role = "participant"; startParticipant(); };
+  document.getElementById("pick-facilitator").onclick = () => { role = "facilitator"; startFacilitator(); };
+}
+
+/* ================= PARTICIPANT ================= */
+let participantLocalRisk = {};
+let participantPillarOrder = null;
+let participantSelectedElements = [];
+
+async function startParticipant() {
+  await renderParticipant();
+  pollTimer = setInterval(renderParticipant, POLL_MS);
+}
+
+async function renderParticipant() {
+  const control = await getControl();
+
+  if (control.exercise === "idle") {
+    root.innerHTML = `
+      <div class="p-header">Heron &amp; Brearley · AI Policy Workshop</div>
+      <div class="p-body waiting">
+        <div style="font-size:40px;margin-bottom:16px;">⏳</div>
+        <div style="font-size:18px;font-weight:600;">Waiting for the facilitator to start</div>
+        <div style="font-size:14px;color:var(--muted);margin-top:6px;">Nothing to do yet — keep this open.</div>
+      </div>`;
+    return;
+  }
+
+  if (control.exercise === "risk") {
+    if (Object.keys(participantLocalRisk).length === 0) participantLocalRisk = await getMyRisk();
+    renderRiskParticipant(control);
+    return;
+  }
+
+  if (control.exercise === "priority" && control.priority_stage === 1) {
+    if (!participantPillarOrder) {
+      const mine = await getMyPriority();
+      participantPillarOrder = mine.pillars
+        ? mine.pillars.map((id) => PILLARS.find((p) => p.id === id)).filter(Boolean)
+        : PILLARS.slice();
+    }
+    renderPriorityStage1(control);
+    return;
+  }
+
+  if (control.exercise === "priority" && control.priority_stage === 2) {
+    if (participantSelectedElements.length === 0) {
+      const mine = await getMyPriority();
+      if (mine.elements) participantSelectedElements = mine.elements;
+    }
+    renderPriorityStage2(control);
+    return;
+  }
+}
+
+function renderRiskParticipant(control) {
+  const scenario = SCENARIOS[control.risk_index];
+  const currentVote = participantLocalRisk[control.risk_index];
+  root.innerHTML = `
+    <div class="p-header">Scenario ${control.risk_index + 1} of ${SCENARIOS.length}</div>
+    <div class="p-body">
+      <div class="scenario-text">${scenario.text}</div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:auto;">
+        ${VOTE_ORDER.map((v) => `
+          <button class="vote-btn" data-vote="${v}" style="background:${VOTE_COLORS[v]};border-color:${currentVote === v ? "var(--navy)" : "transparent"};opacity:${currentVote && currentVote !== v ? 0.55 : 1};">
+            ${VOTE_LABELS[v]}
+          </button>`).join("")}
+      </div>
+      ${currentVote ? `<div style="text-align:center;margin-top:16px;color:var(--muted);font-size:13px;">Voted — tap another option to change your answer</div>` : ""}
+    </div>`;
+  root.querySelectorAll("[data-vote]").forEach((btn) => {
+    btn.onclick = async () => {
+      participantLocalRisk = await castRiskVote(control.risk_index, btn.dataset.vote);
+      renderRiskParticipant(control);
+    };
+  });
+}
+
+function renderPriorityStage1(control) {
+  root.innerHTML = `
+    <div class="p-header">Priority vote · Stage 1 of 2 — rank the pillars</div>
+    <div class="p-body">
+      <div style="font-size:15px;color:var(--muted);margin-bottom:18px;line-height:1.5;">
+        Drag using the handle to put these in order — <strong>most important to resolve first at the top.</strong>
+      </div>
+      <div id="rank-list"></div>
+      <div style="margin-top:24px;">
+        <button class="btn btn-dark" id="submit-pillars" style="width:100%;padding:16px;font-size:16px;">Submit ranking</button>
+      </div>
+      <div id="pillar-status" style="text-align:center;margin-top:12px;color:var(--muted);font-size:13px;"></div>
+    </div>`;
+  renderRankList();
+  document.getElementById("submit-pillars").onclick = async () => {
+    await submitPillars(participantPillarOrder.map((p) => p.id));
+    document.getElementById("pillar-status").textContent = "Submitted — waiting for the facilitator to move to Stage 2";
+  };
+}
+
+function renderRankList() {
+  const container = document.getElementById("rank-list");
+  container.innerHTML = participantPillarOrder.map((item, i) => `
+    <div class="rank-row" data-index="${i}">
+      <div class="rank-num">${i + 1}</div>
+      <div class="rank-name">${item.name}</div>
+      <div class="rank-handle" data-handle="${i}">⠿</div>
+    </div>`).join("");
+
+  let dragIndex = null, startY = 0;
+  container.querySelectorAll("[data-handle]").forEach((handle) => {
+    handle.addEventListener("pointerdown", (e) => {
+      handle.setPointerCapture(e.pointerId);
+      dragIndex = parseInt(handle.dataset.handle, 10);
+      startY = e.clientY;
+      handle.closest(".rank-row").style.zIndex = 5;
+      handle.closest(".rank-row").style.boxShadow = "0 6px 16px rgba(14,40,65,0.18)";
+      handle.closest(".rank-row").style.borderColor = "var(--blue)";
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (dragIndex === null) return;
+      const row = container.children[dragIndex];
+      const deltaY = e.clientY - startY;
+      const itemHeight = row.offsetHeight + 10;
+      const slots = Math.trunc(deltaY / itemHeight);
+      if (slots !== 0) {
+        const newIndex = Math.min(Math.max(dragIndex + slots, 0), participantPillarOrder.length - 1);
+        if (newIndex !== dragIndex) {
+          const [moved] = participantPillarOrder.splice(dragIndex, 1);
+          participantPillarOrder.splice(newIndex, 0, moved);
+          dragIndex = newIndex;
+          startY = e.clientY - (deltaY - slots * itemHeight);
+          renderRankList();
+        }
+      } else {
+        row.style.transform = `translateY(${deltaY}px)`;
+      }
+    });
+    handle.addEventListener("pointerup", () => { dragIndex = null; renderRankList(); });
+    handle.addEventListener("pointercancel", () => { dragIndex = null; renderRankList(); });
+  });
+}
+
+function renderPriorityStage2(control) {
+  const groupsHtml = PILLARS.map((pillar) => `
+    <div style="margin-bottom:18px;">
+      <div class="el-group-label">${pillar.name}</div>
+      ${ELEMENTS.filter((e) => e.pillar === pillar.id).map((el) => {
+        const picked = participantSelectedElements.includes(el.id);
+        const disabled = !picked && participantSelectedElements.length >= ELEMENT_CAP;
+        return `<button class="el-btn ${picked ? "picked" : ""}" data-el="${el.id}" ${disabled ? "disabled" : ""}>${picked ? "✓ " : ""}${el.name}</button>`;
+      }).join("")}
+    </div>`).join("");
+
+  root.innerHTML = `
+    <div class="p-header">Priority vote · Stage 2 of 2 — pick your top ${ELEMENT_CAP} (${participantSelectedElements.length}/${ELEMENT_CAP})</div>
+    <div class="p-body" style="padding-bottom:100px;">
+      <div style="font-size:14px;color:var(--muted);margin-bottom:16px;">What does H&amp;B most need to resolve in the next 90 days?</div>
+      ${groupsHtml}
+    </div>
+    <div class="fixed-submit">
+      <button class="btn btn-dark" id="submit-elements" style="width:100%;padding:16px;font-size:16px;">Submit top ${participantSelectedElements.length || ""}</button>
+    </div>`;
+
+  root.querySelectorAll("[data-el]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.el;
+      const idx = participantSelectedElements.indexOf(id);
+      if (idx > -1) participantSelectedElements.splice(idx, 1);
+      else if (participantSelectedElements.length < ELEMENT_CAP) participantSelectedElements.push(id);
+      renderPriorityStage2(control);
+    };
+  });
+  document.getElementById("submit-elements").onclick = async () => {
+    await submitElements(participantSelectedElements);
+    document.getElementById("submit-elements").textContent = "Submitted — tap to update";
+  };
+}
+
+/* ================= FACILITATOR ================= */
+async function startFacilitator() {
+  await renderFacilitator();
+  pollTimer = setInterval(renderFacilitator, POLL_MS);
+}
+
+let confirmingReset = false;
+
+async function renderFacilitator() {
+  const control = await getControl();
+  const riskRows = await getAllRisk();
+  const priorityRows = await getAllPriority();
+  const deviceCount = new Set([...riskRows.map((r) => r.device_id), ...priorityRows.map((r) => r.device_id)]).size;
+
+  root.innerHTML = `
+    <div class="top-bar">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <strong style="font-size:15px;">H&amp;B Workshop — Facilitator</strong>
+        <button class="tab-btn ${control.exercise === "risk" ? "active" : ""}" id="tab-risk">Risk Spectrum</button>
+        <button class="tab-btn ${control.exercise === "priority" ? "active" : ""}" id="tab-priority">Priority Vote</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+        <span style="opacity:.8;">${deviceCount} device${deviceCount === 1 ? "" : "s"} active</span>
+        <button class="btn btn-subtle" id="export-btn" style="padding:8px 14px;font-size:13px;">Export data</button>
+        ${!confirmingReset
+          ? `<button class="btn btn-ghost" id="reset-btn" style="padding:8px 14px;font-size:13px;color:#fff;border-color:rgba(255,255,255,.4);">Reset all</button>`
+          : `<span style="font-size:12px;">Clear all votes?</span>
+             <button class="btn btn-primary" id="confirm-reset" style="padding:8px 14px;font-size:13px;background:var(--red);">Confirm</button>
+             <button class="btn btn-ghost" id="cancel-reset" style="padding:8px 14px;font-size:13px;color:#fff;border-color:rgba(255,255,255,.4);">Cancel</button>`}
+      </div>
+    </div>
+    <div id="panel"></div>`;
+
+  document.getElementById("tab-risk").onclick = async () => { await setControl({ exercise: "risk", risk_index: 0, priority_stage: 1 }); renderFacilitator(); };
+  document.getElementById("tab-priority").onclick = async () => { await setControl({ exercise: "priority", risk_index: 0, priority_stage: 1 }); renderFacilitator(); };
+  document.getElementById("export-btn").onclick = () => exportCSV(riskRows, priorityRows);
+  if (!confirmingReset) {
+    document.getElementById("reset-btn").onclick = () => { confirmingReset = true; renderFacilitator(); };
+  } else {
+    document.getElementById("confirm-reset").onclick = async () => { await resetAllData(); confirmingReset = false; renderFacilitator(); };
+    document.getElementById("cancel-reset").onclick = () => { confirmingReset = false; renderFacilitator(); };
+  }
+
+  const panel = document.getElementById("panel");
+  if (control.exercise === "idle") {
+    panel.innerHTML = `<div style="padding:60px;text-align:center;color:var(--muted);">Choose an exercise above to begin.</div>`;
+  } else if (control.exercise === "risk") {
+    renderRiskFacilitatorPanel(panel, control, riskRows);
+  } else if (control.exercise === "priority") {
+    renderPriorityFacilitatorPanel(panel, control, priorityRows);
+  }
+}
+
+function renderRiskFacilitatorPanel(panel, control, riskRows) {
+  const scenario = SCENARIOS[control.risk_index];
+  const counts = { green: 0, amber: 0, red: 0, depends: 0 };
+  let total = 0;
+  riskRows.forEach((row) => {
+    const v = row.votes && row.votes[control.risk_index];
+    if (v && counts[v] !== undefined) { counts[v] += 1; total += 1; }
+  });
+
+  panel.innerHTML = `
+    <div class="panel-grid">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <button class="btn btn-ghost" id="prev-scenario" ${control.risk_index === 0 ? "disabled" : ""}>← Prev</button>
+          <div style="font-size:13px;color:var(--muted);font-weight:600;">Scenario ${control.risk_index + 1} / ${SCENARIOS.length}</div>
+          <button class="btn btn-dark" id="next-scenario" ${control.risk_index === SCENARIOS.length - 1 ? "disabled" : ""}>Next →</button>
+        </div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:10px;line-height:1.4;">${scenario.text}</div>
+        <div style="font-size:13px;color:var(--muted);${scenario.armoury ? "margin-bottom:8px;" : ""}">Why it's in: ${scenario.why}</div>
+        ${scenario.armoury ? `<div style="font-size:13px;color:var(--blue);font-style:italic;margin-top:8px;">Armoury: "${scenario.armoury}"</div>` : ""}
+        <div style="margin-top:28px;">
+          ${VOTE_ORDER.map((v) => `
+            <div class="bar-row">
+              <div class="bar-label-row"><span style="font-weight:600;">${VOTE_LABELS[v]}</span><span style="color:var(--muted);">${counts[v]}</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:${total ? (counts[v] / total) * 100 : 0}%;background:${VOTE_COLORS[v]};"></div></div>
+            </div>`).join("")}
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">${total} vote${total === 1 ? "" : "s"} so far</div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px;">Live pattern by device</div>
+        ${riskRows.length === 0 ? `<div style="color:var(--muted);font-size:13px;">No votes yet.</div>` : `
+        <div style="overflow-x:auto;">
+          <table class="pattern">
+            <thead><tr><th style="text-align:left;">Device</th>${SCENARIOS.map((_, i) => `<th style="color:${i === control.risk_index ? "var(--navy)" : "var(--muted)"};font-weight:${i === control.risk_index ? 800 : 500};">${i + 1}</th>`).join("")}</tr></thead>
+            <tbody>
+              ${riskRows.map((row) => `
+                <tr>
+                  <td style="font-family:monospace;color:var(--muted);">${shortId(row.device_id)}</td>
+                  ${SCENARIOS.map((_, i) => {
+                    const v = row.votes && row.votes[i];
+                    return `<td><div class="cell" style="background:${v ? VOTE_COLORS[v] : "#EEF1F3"};${i === control.risk_index ? "border:2px solid var(--navy);" : ""}" title="${v ? VOTE_LABELS[v] : "no vote"}"></div></td>`;
+                  }).join("")}
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`}
+      </div>
+    </div>`;
+
+  document.getElementById("prev-scenario").onclick = async () => { await setControl({ risk_index: control.risk_index - 1 }); renderFacilitator(); };
+  document.getElementById("next-scenario").onclick = async () => { await setControl({ risk_index: control.risk_index + 1 }); renderFacilitator(); };
+}
+
+function renderPriorityFacilitatorPanel(panel, control, priorityRows) {
+  const stage = control.priority_stage;
+  const pillarSubs = priorityRows.filter((d) => d.pillars && d.pillars.length);
+  const pillarAverages = PILLARS.map((p) => {
+    const ranks = pillarSubs.map((d) => d.pillars.indexOf(p.id)).filter((i) => i !== -1);
+    const avg = ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length + 1 : null;
+    return { ...p, avg, count: ranks.length };
+  }).sort((a, b) => (a.avg === null ? 1 : b.avg === null ? -1 : a.avg - b.avg));
+
+  const elementSubs = priorityRows.filter((d) => d.elements && d.elements.length);
+  const elementCounts = ELEMENTS.map((e) => ({ ...e, count: elementSubs.filter((d) => d.elements.includes(e.id)).length }))
+    .sort((a, b) => b.count - a.count);
+  const maxCount = Math.max(1, ...elementCounts.map((e) => e.count));
+
+  panel.innerHTML = `
+    <div style="padding:24px;">
+      <div style="display:flex;gap:12px;margin-bottom:20px;">
+        <button class="btn ${stage === 1 ? "btn-dark" : "btn-subtle"}" id="stage1-btn">Stage 1 · Pillar ranking</button>
+        <button class="btn ${stage === 2 ? "btn-dark" : "btn-subtle"}" id="stage2-btn">Stage 2 · Top ${ELEMENT_CAP} elements</button>
+      </div>
+      ${stage === 1 ? `
+        <div class="card" style="max-width:620px;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px;">Aggregate pillar ranking</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:18px;">${pillarSubs.length} of the room have submitted a ranking</div>
+          ${pillarAverages.map((p, i) => `
+            <div style="display:flex;align-items:center;padding:12px 0;${i < pillarAverages.length - 1 ? "border-bottom:1px solid #EEF1F3;" : ""}">
+              <div class="rank-num" style="margin-right:14px;">${i + 1}</div>
+              <div style="flex:1;font-weight:600;font-size:15px;">${p.name}</div>
+              <div style="font-size:12px;color:var(--muted);">${p.avg !== null ? `avg rank ${p.avg.toFixed(1)} · ${p.count} votes` : "no votes yet"}</div>
+            </div>`).join("")}
+        </div>` : `
+        <div class="card" style="max-width:700px;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px;">Most-picked elements</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:18px;">${elementSubs.length} of the room have submitted their top ${ELEMENT_CAP}</div>
+          ${elementCounts.map((e) => {
+            const pillarName = PILLARS.find((p) => p.id === e.pillar)?.name;
+            return `
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px;">
+                <span style="font-weight:600;">${e.name} <span style="color:var(--muted);font-weight:400;font-size:12px;">(${pillarName})</span></span>
+                <span style="color:var(--muted);">${e.count}</span>
+              </div>
+              <div class="bar-track" style="height:16px;"><div class="bar-fill" style="width:${(e.count / maxCount) * 100}%;background:var(--blue);"></div></div>
+            </div>`;
+          }).join("")}
+        </div>`}
+    </div>`;
+
+  document.getElementById("stage1-btn").onclick = async () => { await setControl({ priority_stage: 1 }); renderFacilitator(); };
+  document.getElementById("stage2-btn").onclick = async () => { await setControl({ priority_stage: 2 }); renderFacilitator(); };
+}
+
+function exportCSV(riskRows, priorityRows) {
+  const rows = [];
+  const header = ["deviceId", ...SCENARIOS.map((_, i) => `scenario_${i + 1}`), ...PILLARS.map((p) => `rank_${p.name}`), "top_elements"];
+  rows.push(header);
+  const riskMap = Object.fromEntries(riskRows.map((r) => [r.device_id, r.votes || {}]));
+  const priMap = Object.fromEntries(priorityRows.map((r) => [r.device_id, r]));
+  const allIds = Array.from(new Set([...Object.keys(riskMap), ...Object.keys(priMap)]));
+  allIds.forEach((id) => {
+    const risk = riskMap[id] || {};
+    const pr = priMap[id] || {};
+    const riskCols = SCENARIOS.map((_, i) => risk[i] || "");
+    const pillarRanks = PILLARS.map((p) => {
+      const idx = (pr.pillars || []).indexOf(p.id);
+      return idx === -1 ? "" : idx + 1;
+    });
+    const elementNames = (pr.elements || []).map((eid) => ELEMENTS.find((e) => e.id === eid)?.name || eid).join("; ");
+    rows.push([shortId(id), ...riskCols, ...pillarRanks, elementNames]);
+  });
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "hb-workshop-votes.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+renderRoleSelect();
+</script>
+</body>
+</html>
