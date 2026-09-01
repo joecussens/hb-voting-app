@@ -29,6 +29,7 @@
   .btn-dark { background: var(--navy); color: #fff; }
   .btn-ghost { background: transparent; color: var(--navy); border: 1.5px solid var(--navy); }
   .btn-subtle { background: var(--grey); color: var(--navy); }
+  .btn-success { background: var(--green); color: #fff; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .role-screen { min-height: 100vh; background: var(--navy); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
   .role-eyebrow { color:#fff; font-size:13px; opacity:.7; margin-bottom:8px; letter-spacing:.5px; }
@@ -209,7 +210,9 @@ function renderRoleSelect() {
 /* ================= PARTICIPANT ================= */
 let participantLocalRisk = {};
 let participantPillarOrder = null;
+let participantPillarsSubmitted = false;
 let participantSelectedElements = [];
+let participantElementsSubmitted = false;
 
 async function startParticipant() {
   await renderParticipant();
@@ -256,7 +259,6 @@ async function renderParticipant() {
     return;
   }
 }
-
 function renderRiskParticipant(control) {
   const scenario = SCENARIOS[control.risk_index];
   const currentVote = participantLocalRisk[control.risk_index];
@@ -291,60 +293,111 @@ function renderPriorityStage1(control) {
       </div>
       <div id="rank-list"></div>
       <div style="margin-top:24px;">
-        <button class="btn btn-dark" id="submit-pillars" style="width:100%;padding:16px;font-size:16px;">Submit ranking</button>
+        <button class="btn ${participantPillarsSubmitted ? "btn-success" : "btn-dark"}" id="submit-pillars" style="width:100%;padding:16px;font-size:16px;">
+          ${participantPillarsSubmitted ? "✓ Submitted — tap to update" : "Submit ranking"}
+        </button>
       </div>
-      <div id="pillar-status"></div>
     </div>`;
   renderRankList();
   document.getElementById("submit-pillars").onclick = async () => {
     await submitPillars(participantPillarOrder.map((p) => p.id));
-    document.getElementById("pillar-status").innerHTML = `
-      <div style="margin-top:14px;padding:12px 14px;border-radius:8px;background:#EAF3EC;border:1.5px solid var(--green);color:var(--green);font-weight:600;font-size:14px;text-align:center;">
-        ✓ Ranking submitted — waiting for Stage 2
-      </div>`;
+    participantPillarsSubmitted = true;
+    renderPriorityStage1(control);
   };
 }
 
 function renderRankList() {
   const container = document.getElementById("rank-list");
-  container.innerHTML = participantPillarOrder.map((item, i) => `
-    <div class="rank-row" data-index="${i}">
+  container.innerHTML = "";
+  participantPillarOrder.forEach((item, i) => {
+    const row = document.createElement("div");
+    row.className = "rank-row";
+    row.dataset.id = item.id;
+    row.innerHTML = `
       <div class="rank-num">${i + 1}</div>
       <div class="rank-name">${item.name}</div>
-      <div class="rank-handle" data-handle="${i}">⠿</div>
-    </div>`).join("");
+      <div class="rank-handle">⠿</div>`;
+    container.appendChild(row);
+  });
+  attachDragHandlers(container);
+}
 
-  let dragIndex = null, startY = 0;
-  container.querySelectorAll("[data-handle]").forEach((handle) => {
+function updateRankNumbers(container) {
+  Array.from(container.children).forEach((row, i) => {
+    row.querySelector(".rank-num").textContent = i + 1;
+  });
+}
+
+function syncOrderFromDOM(container) {
+  const ids = Array.from(container.children).map((row) => row.dataset.id);
+  participantPillarOrder = ids.map((id) => PILLARS.find((p) => p.id === id));
+}
+
+function markPillarsUnsubmittedIfNeeded() {
+  if (participantPillarsSubmitted) {
+    participantPillarsSubmitted = false;
+    const btn = document.getElementById("submit-pillars");
+    if (btn) {
+      btn.textContent = "Submit ranking";
+      btn.classList.remove("btn-success");
+      btn.classList.add("btn-dark");
+    }
+  }
+}
+
+function attachDragHandlers(container) {
+  let dragEl = null;
+  let startY0 = 0;
+  let startIndex0 = 0;
+  let currentDomIndex = 0;
+  let rowHeight = 0;
+
+  container.querySelectorAll(".rank-handle").forEach((handle) => {
     handle.addEventListener("pointerdown", (e) => {
       handle.setPointerCapture(e.pointerId);
-      dragIndex = parseInt(handle.dataset.handle, 10);
-      startY = e.clientY;
-      handle.closest(".rank-row").style.zIndex = 5;
-      handle.closest(".rank-row").style.boxShadow = "0 6px 16px rgba(14,40,65,0.18)";
-      handle.closest(".rank-row").style.borderColor = "var(--blue)";
+      dragEl = handle.closest(".rank-row");
+      startY0 = e.clientY;
+      startIndex0 = Array.from(container.children).indexOf(dragEl);
+      currentDomIndex = startIndex0;
+      rowHeight = dragEl.offsetHeight + 10;
+      dragEl.style.zIndex = 5;
+      dragEl.style.boxShadow = "0 6px 16px rgba(14,40,65,0.18)";
+      dragEl.style.borderColor = "var(--blue)";
     });
+
     handle.addEventListener("pointermove", (e) => {
-      if (dragIndex === null) return;
-      const row = container.children[dragIndex];
-      const deltaY = e.clientY - startY;
-      const itemHeight = row.offsetHeight + 10;
-      const slots = Math.trunc(deltaY / itemHeight);
-      if (slots !== 0) {
-        const newIndex = Math.min(Math.max(dragIndex + slots, 0), participantPillarOrder.length - 1);
-        if (newIndex !== dragIndex) {
-          const [moved] = participantPillarOrder.splice(dragIndex, 1);
-          participantPillarOrder.splice(newIndex, 0, moved);
-          dragIndex = newIndex;
-          startY = e.clientY - (deltaY - slots * itemHeight);
-          renderRankList();
+      if (!dragEl) return;
+      const totalDeltaY = e.clientY - startY0;
+      const maxIndex = container.children.length - 1;
+      const targetIndex = Math.min(Math.max(startIndex0 + Math.round(totalDeltaY / rowHeight), 0), maxIndex);
+      const visualOffset = totalDeltaY - (targetIndex - startIndex0) * rowHeight;
+      dragEl.style.transform = `translateY(${visualOffset}px)`;
+
+      if (targetIndex !== currentDomIndex) {
+        const referenceNode = container.children[targetIndex];
+        if (targetIndex > currentDomIndex) {
+          container.insertBefore(dragEl, referenceNode.nextSibling);
+        } else {
+          container.insertBefore(dragEl, referenceNode);
         }
-      } else {
-        row.style.transform = `translateY(${deltaY}px)`;
+        currentDomIndex = targetIndex;
+        updateRankNumbers(container);
+        syncOrderFromDOM(container);
       }
     });
-    handle.addEventListener("pointerup", () => { dragIndex = null; renderRankList(); });
-    handle.addEventListener("pointercancel", () => { dragIndex = null; renderRankList(); });
+
+    function endDrag() {
+      if (dragEl) {
+        dragEl.style.transform = "";
+        dragEl.style.zIndex = "";
+        dragEl.style.boxShadow = "";
+        dragEl.style.borderColor = "";
+      }
+      if (dragEl) markPillarsUnsubmittedIfNeeded();
+      dragEl = null;
+    }
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
   });
 }
 
@@ -366,8 +419,9 @@ function renderPriorityStage2(control) {
       ${groupsHtml}
     </div>
     <div class="fixed-submit">
-      <div id="element-status"></div>
-      <button class="btn btn-dark" id="submit-elements" style="width:100%;padding:16px;font-size:16px;">Submit top ${participantSelectedElements.length || ""}</button>
+      <button class="btn ${participantElementsSubmitted ? "btn-success" : "btn-dark"}" id="submit-elements" style="width:100%;padding:16px;font-size:16px;">
+        ${participantElementsSubmitted ? "✓ Submitted — tap to update" : `Submit top ${participantSelectedElements.length || ""}`}
+      </button>
     </div>`;
 
   root.querySelectorAll("[data-el]").forEach((btn) => {
@@ -376,16 +430,14 @@ function renderPriorityStage2(control) {
       const idx = participantSelectedElements.indexOf(id);
       if (idx > -1) participantSelectedElements.splice(idx, 1);
       else if (participantSelectedElements.length < ELEMENT_CAP) participantSelectedElements.push(id);
+      participantElementsSubmitted = false;
       renderPriorityStage2(control);
     };
   });
   document.getElementById("submit-elements").onclick = async () => {
     await submitElements(participantSelectedElements);
-    document.getElementById("element-status").innerHTML = `
-      <div style="margin-bottom:10px;padding:10px 14px;border-radius:8px;background:#EAF3EC;border:1.5px solid var(--green);color:var(--green);font-weight:600;font-size:13px;text-align:center;">
-        ✓ Submitted
-      </div>`;
-    document.getElementById("submit-elements").textContent = "Submitted — tap to update";
+    participantElementsSubmitted = true;
+    renderPriorityStage2(control);
   };
 }
 
