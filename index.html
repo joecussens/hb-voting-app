@@ -85,14 +85,12 @@ const ELEMENT_CAP = 8;
 const POLL_MS = 2500;
 
 const SCENARIOS = [
-  { text: "Uploading a signed commercial lease to Copilot to summarise the break clauses", why: "Data privacy + tests the Copilot-vs-ChatGPT knowledge gap", armoury: null },
-  { text: "An agent that reads supplier invoices and posts them into the finance system with no human check", why: "Accountability + automation without oversight — lands directly for Danny", armoury: "Same scenario, but it's your name on it if it goes wrong. Same answer?" },
-  { text: "Using AI to screen job applications", why: "Fairness/bias — Rohan raised this unprompted in his own call", armoury: "Same scenario, but a competitor's already doing it. Same answer?" },
-  { text: "AI-written social copy going onto a pub's Facebook page without review", why: "Brand risk, low technical complexity — easy entry point", armoury: null },
-  { text: "Uploading a customer complaint, with name and address, to draft a response", why: "Data privacy, close to daily reality for several attendees", armoury: null },
-  { text: "A supplier's new AI feature that processes your EPOS data offshore", why: "Third-party creep — AI arriving without anyone deciding", armoury: null },
-  { text: "An AI phone agent taking table bookings", why: "Named use case from earlier content — directly contentious for Ollie vs Wayde", armoury: "Who's changed their mind in the last five minutes?" },
-  { text: "Auto-ordering stock from an AI demand forecast with no human sign-off", why: "Automation + commercial risk, distinct from #2 (revenue vs cost side)", armoury: null },
+  "An AI phone agent taking table bookings",
+  "Using AI to screen job applications",
+  "AI-written social copy onto a pub's Facebook page, no review",
+  "AI assistant to draft a response to a customer complaint, with name and address",
+  "Copilot to review existing commercial lease and summarise break clauses",
+  "Auto-ordering stock from an AI demand forecast, no human sign-off",
 ];
 
 const PILLARS = [
@@ -273,7 +271,7 @@ function renderRiskParticipant(control) {
     <div class="risk-screen">
       <div class="p-header">Scenario ${control.risk_index + 1} of ${SCENARIOS.length}</div>
       <div class="risk-content">
-        <div class="scenario-text">${scenario.text}</div>
+        <div class="scenario-text">${scenario}</div>
         <div class="vote-group">
           ${VOTE_ORDER.map((v) => `
             <button class="vote-btn" data-vote="${v}" style="background:${VOTE_COLORS[v]};border-color:${currentVote === v ? "var(--navy)" : "transparent"};opacity:${currentVote && currentVote !== v ? 0.55 : 1};">
@@ -518,9 +516,7 @@ function renderRiskFacilitatorPanel(panel, control, riskRows) {
           <div style="font-size:13px;color:var(--muted);font-weight:600;">Scenario ${control.risk_index + 1} / ${SCENARIOS.length}</div>
           <button class="btn btn-dark" id="next-scenario" ${control.risk_index === SCENARIOS.length - 1 ? "disabled" : ""}>Next →</button>
         </div>
-        <div style="font-size:20px;font-weight:700;margin-bottom:10px;line-height:1.4;">${scenario.text}</div>
-        <div style="font-size:13px;color:var(--muted);${scenario.armoury ? "margin-bottom:8px;" : ""}">Why it's in: ${scenario.why}</div>
-        ${scenario.armoury ? `<div style="font-size:13px;color:var(--blue);font-style:italic;margin-top:8px;">Armoury: "${scenario.armoury}"</div>` : ""}
+        <div style="font-size:20px;font-weight:700;margin-bottom:10px;line-height:1.4;">${scenario}</div>
         <div style="margin-top:28px;">
           ${VOTE_ORDER.map((v) => `
             <div class="bar-row">
