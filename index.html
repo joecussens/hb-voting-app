@@ -51,6 +51,7 @@
   .el-btn { display:block; width:100%; text-align:left; font-size:15px; font-weight:500; padding:13px 14px; border-radius:8px; border:2px solid #DDE3E8; background:#fff; color:var(--ink); margin-bottom:8px; }
   .el-btn.picked { font-weight:700; border-color:var(--blue); background:#EAF3F6; }
   .el-btn:disabled { color:#B7BEC6; cursor:not-allowed; }
+  .el-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--navy); color:#fff; font-size:12px; font-weight:700; margin-right:10px; flex-shrink:0; vertical-align:middle; }
   .fixed-submit { position:fixed; bottom:0; left:0; right:0; padding:16px; background:#fff; border-top:1px solid #E2E6EA; }
   .top-bar { background:var(--navy); color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
   .tab-btn { font-weight:600; font-size:14px; padding:8px 16px; border-radius:20px; border:none; background:rgba(255,255,255,.12); color:#fff; }
@@ -457,9 +458,11 @@ function renderPriorityStage2Choose(control) {
     <div style="margin-bottom:18px;">
       <div class="el-group-label">${pillar.name}</div>
       ${ELEMENTS.filter((e) => e.pillar === pillar.id).map((el) => {
-        const picked = participantSelectedElements.includes(el.id);
+        const pickIndex = participantSelectedElements.indexOf(el.id);
+        const picked = pickIndex !== -1;
         const disabled = !picked && participantSelectedElements.length >= ELEMENT_CAP;
-        return `<button class="el-btn ${picked ? "picked" : ""}" data-el="${el.id}" ${disabled ? "disabled" : ""}>${picked ? "✓ " : ""}${el.name}</button>`;
+        const badge = picked ? `<span class="el-badge">${pickIndex + 1}</span>` : "";
+        return `<button class="el-btn ${picked ? "picked" : ""}" data-el="${el.id}" ${disabled ? "disabled" : ""}>${badge}${el.name}</button>`;
       }).join("")}
     </div>`).join("");
 
