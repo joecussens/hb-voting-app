@@ -54,6 +54,13 @@
   .el-btn.picked { font-weight:700; border-color:var(--blue); background:#EAF3F6; }
   .el-btn:disabled { color:#B7BEC6; cursor:not-allowed; }
   .el-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--navy); color:#fff; font-size:12px; font-weight:700; margin-right:10px; flex-shrink:0; vertical-align:middle; }
+  .fb-q { font-size:16px; font-weight:700; margin:22px 0 10px; line-height:1.35; }
+  .fb-grid10 { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .fb-grid5 { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .fb-num { font-size:17px; font-weight:700; padding:13px 0; border-radius:8px; border:2px solid #DDE3E8; background:#fff; color:var(--ink); }
+  .fb-num.sel { background:var(--navy); border-color:var(--navy); color:#fff; }
+  .fb-ends { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:6px; }
+  .fb-text { width:100%; box-sizing:border-box; font:inherit; font-size:16px; padding:12px; border-radius:8px; border:2px solid #DDE3E8; background:#fff; color:var(--ink); resize:vertical; }
   .fixed-submit { position:fixed; bottom:0; left:0; right:0; padding:16px; background:#fff; border-top:1px solid #E2E6EA; }
   .top-bar { background:var(--navy); color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
   .tab-btn { font-weight:600; font-size:14px; padding:8px 16px; border-radius:20px; border:none; background:rgba(255,255,255,.12); color:#fff; }
@@ -191,7 +198,22 @@ async function getAllPriority() {
   const { data } = await sb.from("priority_votes").select("device_id,pillars,elements");
   return data || [];
 }
+const FB_AREAS = ["Tool selection", "Tool training", "Strategy development", "Agent building", "Data structure", "Automation building", "Security + governance", "Use case identification", "AI advisory Q+A"];
+let fb = { usefulness: null, confidence: null, areas: [], other: "", feedback: "", mostUseful: "" };
+let fbSubmitted = false;
+function esc(t) { return String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+async function submitFeedback() {
+  await sb.from("feedback_responses").upsert(
+    { device_id: DEVICE_ID, usefulness: fb.usefulness, confidence: fb.confidence, support_areas: fb.areas, support_other: fb.other, feedback: fb.feedback, most_useful: fb.mostUseful, updated_at: new Date().toISOString() },
+    { onConflict: "device_id" }
+  );
+}
+async function getAllFeedback() {
+  const { data } = await sb.from("feedback_responses").select("*");
+  return data || [];
+}
 async function resetAllData() {
+  await sb.from("feedback_responses").delete().neq("device_id", "");
   await sb.from("risk_votes").delete().neq("device_id", "");
   await sb.from("priority_votes").delete().neq("device_id", "");
   await setControl({ exercise: "idle", risk_index: 0, priority_stage: 1 });
@@ -243,6 +265,11 @@ async function renderParticipant() {
         <div style="font-size:18px;font-weight:600;">Waiting for the facilitator to start</div>
         <div style="font-size:14px;color:var(--muted);margin-top:6px;">Nothing to do yet — keep this open.</div>
       </div>`;
+    return;
+  }
+
+  if (control.exercise === "feedback") {
+    renderFeedbackParticipant();
     return;
   }
 
@@ -299,6 +326,74 @@ function renderRiskParticipant(control) {
       renderRiskParticipant(control);
     };
   });
+}
+
+function renderFeedbackParticipant() {
+  const y = window.scrollY;
+  const scale5 = [1, 2, 3, 4, 5];
+  const nums10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const otherOn = fb.areas.includes("Other");
+  root.innerHTML = `
+    <div class="p-header">Heron &amp; Brearley · Workshop feedback</div>
+    <div class="p-body" style="padding-bottom:110px;">
+      <div style="font-size:14px;color:var(--muted);">Anonymous, and it only takes a minute.</div>
+
+      <div class="fb-q">1. On a scale of 1 to 10, how useful have you found the day?</div>
+      <div class="fb-grid10">${nums10.map((n) => `<button class="fb-num ${fb.usefulness === n ? "sel" : ""}" data-use="${n}">${n}</button>`).join("")}</div>
+      <div class="fb-ends"><span>Not useful</span><span>Very useful</span></div>
+
+      <div class="fb-q">2. I feel more informed and confident than I did at the start of the day on the steps needed by the business to adopt AI.</div>
+      <div class="fb-grid5">${scale5.map((n) => `<button class="fb-num ${fb.confidence === n ? "sel" : ""}" data-conf="${n}">${n}</button>`).join("")}</div>
+      <div class="fb-ends"><span>Strongly disagree</span><span>Strongly agree</span></div>
+
+      <div class="fb-q">3. What areas do you need more support on?</div>
+      <div style="font-size:13px;color:var(--muted);margin:-4px 0 10px;">Choose as many as you like.</div>
+      ${FB_AREAS.concat(["Other"]).map((a) => {
+        const on = fb.areas.includes(a);
+        return `<button class="el-btn ${on ? "picked" : ""}" data-area="${esc(a)}">${on ? `<span class="el-badge">✓</span>` : ""}${esc(a)}</button>`;
+      }).join("")}
+      ${otherOn ? `<input id="fb-other" class="fb-text" type="text" placeholder="Other (please say)" value="${esc(fb.other)}">` : ""}
+
+      <div class="fb-q">4. Please provide some feedback on how you found the day.</div>
+      <textarea id="fb-feedback" class="fb-text" rows="4">${esc(fb.feedback)}</textarea>
+
+      <div class="fb-q">5. What did you find most useful?</div>
+      <textarea id="fb-most" class="fb-text" rows="4">${esc(fb.mostUseful)}</textarea>
+    </div>
+    <div class="fixed-submit">
+      <button class="btn ${fbSubmitted ? "btn-success" : "btn-dark"}" id="fb-submit" style="width:100%;padding:16px;font-size:16px;">
+        ${fbSubmitted ? "✓ Submitted — tap to update" : "Submit feedback"}
+      </button>
+    </div>`;
+  window.scrollTo(0, y);
+
+  const touched = () => {
+    if (fbSubmitted) {
+      fbSubmitted = false;
+      const b = document.getElementById("fb-submit");
+      if (b) { b.textContent = "Submit feedback"; b.classList.remove("btn-success"); b.classList.add("btn-dark"); }
+    }
+  };
+  root.querySelectorAll("[data-use]").forEach((b) => { b.onclick = () => { fb.usefulness = +b.dataset.use; touched(); renderFeedbackParticipant(); }; });
+  root.querySelectorAll("[data-conf]").forEach((b) => { b.onclick = () => { fb.confidence = +b.dataset.conf; touched(); renderFeedbackParticipant(); }; });
+  root.querySelectorAll("[data-area]").forEach((b) => {
+    b.onclick = () => {
+      const a = b.dataset.area;
+      const i = fb.areas.indexOf(a);
+      if (i > -1) fb.areas.splice(i, 1); else fb.areas.push(a);
+      touched();
+      renderFeedbackParticipant();
+    };
+  });
+  const other = document.getElementById("fb-other");
+  if (other) other.oninput = () => { fb.other = other.value; touched(); };
+  document.getElementById("fb-feedback").oninput = (e) => { fb.feedback = e.target.value; touched(); };
+  document.getElementById("fb-most").oninput = (e) => { fb.mostUseful = e.target.value; touched(); };
+  document.getElementById("fb-submit").onclick = async () => {
+    await submitFeedback();
+    fbSubmitted = true;
+    renderFeedbackParticipant();
+  };
 }
 
 function renderPriorityStage1(control) {
@@ -531,7 +626,8 @@ async function renderFacilitator() {
   const control = await getControl();
   const riskRows = await getAllRisk();
   const priorityRows = await getAllPriority();
-  const deviceCount = new Set([...riskRows.map((r) => r.device_id), ...priorityRows.map((r) => r.device_id)]).size;
+  const feedbackRows = await getAllFeedback();
+  const deviceCount = new Set([...riskRows.map((r) => r.device_id), ...priorityRows.map((r) => r.device_id), ...feedbackRows.map((r) => r.device_id)]).size;
 
   root.innerHTML = `
     <div class="top-bar">
@@ -539,13 +635,14 @@ async function renderFacilitator() {
         <strong style="font-size:15px;">H&amp;B Workshop — Facilitator</strong>
         <button class="tab-btn ${control.exercise === "risk" ? "active" : ""}" id="tab-risk">Risk Spectrum</button>
         <button class="tab-btn ${control.exercise === "priority" ? "active" : ""}" id="tab-priority">Priority Vote</button>
+        <button class="tab-btn ${control.exercise === "feedback" ? "active" : ""}" id="tab-feedback">Feedback</button>
       </div>
       <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
         <span style="opacity:.8;">${deviceCount} device${deviceCount === 1 ? "" : "s"} active</span>
         <button class="btn btn-subtle" id="export-btn" style="padding:8px 14px;font-size:13px;">Export data</button>
         ${!confirmingReset
           ? `<button class="btn btn-ghost" id="reset-btn" style="padding:8px 14px;font-size:13px;color:#fff;border-color:rgba(255,255,255,.4);">Reset all</button>`
-          : `<span style="font-size:12px;">Clear all votes?</span>
+          : `<span style="font-size:12px;">Clear all votes and feedback?</span>
              <button class="btn btn-primary" id="confirm-reset" style="padding:8px 14px;font-size:13px;background:var(--red);">Confirm</button>
              <button class="btn btn-ghost" id="cancel-reset" style="padding:8px 14px;font-size:13px;color:#fff;border-color:rgba(255,255,255,.4);">Cancel</button>`}
       </div>
@@ -554,7 +651,8 @@ async function renderFacilitator() {
 
   document.getElementById("tab-risk").onclick = async () => { await setControl({ exercise: "risk", risk_index: 0, priority_stage: 1 }); renderFacilitator(); };
   document.getElementById("tab-priority").onclick = async () => { await setControl({ exercise: "priority", risk_index: 0, priority_stage: 1 }); renderFacilitator(); };
-  document.getElementById("export-btn").onclick = () => exportCSV(riskRows, priorityRows);
+  document.getElementById("tab-feedback").onclick = async () => { await setControl({ exercise: "feedback", risk_index: 0, priority_stage: 1 }); renderFacilitator(); };
+  document.getElementById("export-btn").onclick = () => exportCSV(riskRows, priorityRows, feedbackRows);
   if (!confirmingReset) {
     document.getElementById("reset-btn").onclick = () => { confirmingReset = true; renderFacilitator(); };
   } else {
@@ -569,7 +667,63 @@ async function renderFacilitator() {
     renderRiskFacilitatorPanel(panel, control, riskRows);
   } else if (control.exercise === "priority") {
     renderPriorityFacilitatorPanel(panel, control, priorityRows);
+  } else if (control.exercise === "feedback") {
+    renderFeedbackFacilitatorPanel(panel, feedbackRows);
   }
+}
+
+function renderFeedbackFacilitatorPanel(panel, rows) {
+  const dist = (key, max) => {
+    const c = Array(max).fill(0);
+    let sum = 0, cnt = 0;
+    rows.forEach((r) => { const v = r[key]; if (v >= 1 && v <= max) { c[v - 1]++; sum += v; cnt++; } });
+    return { c, cnt, avg: cnt ? sum / cnt : null };
+  };
+  const bars = (d, labels) => {
+    const mx = Math.max(1, ...d.c);
+    return d.c.map((n, i) => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:13px;">
+        <div style="width:${labels ? 120 : 22}px;color:var(--muted);flex-shrink:0;">${labels ? labels[i] : i + 1}</div>
+        <div class="bar-track" style="flex:1;height:14px;"><div class="bar-fill" style="width:${(n / mx) * 100}%;background:var(--blue);"></div></div>
+        <div style="width:22px;text-align:right;">${n}</div>
+      </div>`).join("");
+  };
+  const use = dist("usefulness", 10);
+  const conf = dist("confidence", 5);
+  const areaCounts = FB_AREAS.concat(["Other"]).map((a) => ({ a, n: rows.filter((r) => (r.support_areas || []).includes(a)).length })).sort((x, y) => y.n - x.n);
+  const maxArea = Math.max(1, ...areaCounts.map((x) => x.n));
+  const texts = (key) => rows.map((r) => (r[key] || "").trim()).filter(Boolean);
+  const textCard = (title, arr) => `
+    <div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px;">${title} <span style="font-weight:400;color:var(--muted);font-size:12px;">(${arr.length})</span></div>
+      ${arr.length ? arr.map((t) => `<div style="padding:10px 12px;background:#F4F6F8;border-radius:8px;margin-bottom:8px;font-size:14px;line-height:1.45;white-space:pre-wrap;">${esc(t)}</div>`).join("") : `<div style="color:var(--muted);font-size:13px;">Nothing yet.</div>`}
+    </div>`;
+
+  panel.innerHTML = `
+    <div style="padding:24px 24px 0;font-size:13px;color:var(--muted);">${rows.length} response${rows.length === 1 ? "" : "s"} so far</div>
+    <div class="panel-grid">
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">How useful was the day? (1 to 10)</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${use.avg !== null ? `Average ${use.avg.toFixed(1)}` : "No responses yet"}</div>
+        ${bars(use)}
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">More informed and confident than at the start of the day</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${conf.avg !== null ? `Average ${conf.avg.toFixed(1)} out of 5` : "No responses yet"}</div>
+        ${bars(conf, ["1 Strongly disagree", "2", "3", "4", "5 Strongly agree"])}
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px;">Areas where more support is needed</div>
+        ${areaCounts.map((x) => `
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span style="font-weight:600;">${esc(x.a)}</span><span style="color:var(--muted);">${x.n}</span></div>
+            <div class="bar-track" style="height:12px;"><div class="bar-fill" style="width:${(x.n / maxArea) * 100}%;background:var(--blue);"></div></div>
+          </div>`).join("")}
+      </div>
+      ${textCard("Other areas mentioned", texts("support_other"))}
+      ${textCard("Feedback on the day", texts("feedback"))}
+      ${textCard("What was most useful", texts("most_useful"))}
+    </div>`;
 }
 
 let riskFacilitatorView = "single";
@@ -742,13 +896,14 @@ function renderPriorityFacilitatorPanel(panel, control, priorityRows) {
   document.getElementById("stage2-btn").onclick = async () => { await setControl({ priority_stage: 2 }); renderFacilitator(); };
 }
 
-function exportCSV(riskRows, priorityRows) {
+function exportCSV(riskRows, priorityRows, feedbackRows = []) {
   const rows = [];
-  const header = ["deviceId", ...SCENARIOS.map((_, i) => `scenario_${i + 1}_${SCENARIO_TITLES[i]}`), ...PILLARS.map((p) => `rank_${p.name}`), "top_elements"];
+  const header = ["deviceId", ...SCENARIOS.map((_, i) => `scenario_${i + 1}_${SCENARIO_TITLES[i]}`), ...PILLARS.map((p) => `rank_${p.name}`), "top_elements", "fb_usefulness_1to10", "fb_confidence_1to5", "fb_support_areas", "fb_support_other", "fb_feedback", "fb_most_useful"];
   rows.push(header);
   const riskMap = Object.fromEntries(riskRows.map((r) => [r.device_id, r.votes || {}]));
   const priMap = Object.fromEntries(priorityRows.map((r) => [r.device_id, r]));
-  const allIds = Array.from(new Set([...Object.keys(riskMap), ...Object.keys(priMap)]));
+  const fbMap = Object.fromEntries(feedbackRows.map((r) => [r.device_id, r]));
+  const allIds = Array.from(new Set([...Object.keys(riskMap), ...Object.keys(priMap), ...Object.keys(fbMap)]));
   allIds.forEach((id) => {
     const risk = riskMap[id] || {};
     const pr = priMap[id] || {};
@@ -758,7 +913,8 @@ function exportCSV(riskRows, priorityRows) {
       return idx === -1 ? "" : idx + 1;
     });
     const elementNames = (pr.elements || []).map((eid, i) => `${i + 1}. ${ELEMENTS.find((e) => e.id === eid)?.name || eid}`).join("; ");
-    rows.push([shortId(id), ...riskCols, ...pillarRanks, elementNames]);
+    const f = fbMap[id] || {};
+    rows.push([shortId(id), ...riskCols, ...pillarRanks, elementNames, f.usefulness ?? "", f.confidence ?? "", (f.support_areas || []).join("; "), f.support_other || "", f.feedback || "", f.most_useful || ""]);
   });
   const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
